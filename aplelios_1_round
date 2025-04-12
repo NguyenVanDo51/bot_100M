@@ -14,10 +14,11 @@ enum BOT_MODE
   {
    MODE_68 = 1,
    MODE_69 = 2,
-   MODE_75 = 12,
-   SAFE_MODE_80 = 3,
-   SUPER_SAFE_MODE_83 = 4,
-   CUSTOM_MODE = 5
+   MODE_70 = 3,
+   MODE_75 = 4,
+   MODE_80 = 5,
+   SUPER_SAFE_MODE_83 = 6,
+   CUSTOM_MODE = 7
   };
 
 enum AUTO_X_MODE
@@ -34,57 +35,53 @@ enum AUTO_X_MODE
 //+------------------------------------------------------------------+
 input BOT_MODE botMode = MODE_68;               // MODE (Cài sẵn RSI, x2 lot với safe mode)
 input AUTO_X_MODE autoX = MODE_2K_X1_SL_70;     // Hệ số tự đông
-input bool compoundInterest = true;            // Chế độ lãi kép
+input bool compoundInterest = true;             // Chế độ lãi kép
 
-input string _ = "                                                                ";
-input int xBuyInput = 1;                        // Tùy chỉnh hệ số Sell
-input int xSellInput = 1;                       // Tùy chỉnh hệ số Buy
-
-input string __ = "                                                                ";
+input string __ = "                                                                   ";
+input double TPRSIDistanceInput = 5;            // RSI hồi để đóng sớm Sell (70 - 5 = 65)
 input double rsiSellInput = 69;                 // Ngưỡng RSI Sell
 input double rsiBuyInput = 31;                  // Ngưỡng RSI Buy
 
+input string _ = "                                                                    ";
+input int xBuyInput = 1;                        // Tùy chỉnh hệ số Sell
+input int xSellInput = 1;                       // Tùy chỉnh hệ số Buy
+
+input string ____ = "                                                                  ";
+input double stepPrice = 2.0;                   // Khoảng cách giá (USD)
+
+input string _____ = "                                                                 ";
+input int delaySeconds = 50;                    // Delay time (s)
+input int maxDelaySeconds = 180;                // Max Delay time (s)
+input int delayTimeStep = 10;                   // Delay time step
+
 input string ______ = "                                                                ";
-input double TPRSIDistanceSellInput = 5;        // RSI hồi để đóng sớm Sell (69 - 8 = 61)
-input double TPRSIDistanceBuyInput = 5;          // RSI hồi để đóng sớm Buy (31 + 8 = 39)
+input ENUM_TIMEFRAMES mainTimeframe = PERIOD_M5;
+input int rsiPeriod = 14;                       // Chu kỳ RSI
+input int candleNonTP = 10;                     // Số nến chốt non
+input int candleTP0 = 15;                       // Số nến chốt hòa
 
-input string ___ = "                                                                ";
-input double stepPip = 200;                     // Step pips và TP Pips
+input string _______ = "                                                                ";
+input int maxOrders = 12;                       // Số lệnh tối đa
+input int nonTPQuantity = 5;                    // Số lệnh chốt non
+input int averageQuantity = 7;                  // Số lệnh chốt hòa
 
-input string ____ = "                                                                ";
-input int delaySeconds = 50;              // Delay time (s)
-input int maxDelaySeconds = 180;          // Max Delay time (s)
-input int delayTimeStep = 10;             // Delay time step
-
-input int candleNonTP = 10;               // Số nến chốt non
-input int candleTP0 = 15;                 // Số nến chốt hòa
+input string ________ = "                                                                ";
+input string botTkn = "8143370585:AAHAYagRIB614EkjsA_8ggflIP-vlLJsnwY"; // bot telegram token
+input string chatID = "-1002349691879"; // chatID
 
 double TPRSISell = 60;
 double TPRSIBuy = 40;
+
 //+------------------------------------------------------------------+
 //|                                                                  |
 //+------------------------------------------------------------------+
 int xBuy = 1;                       // Hệ số Sell (10k = 3)
 int xSell = 1;                      // Hệ số Buy (10k = 3)
+double tpPrice;                             // Số pips chốt lời
+double nontpPrice;                          // Số pips chốt lời sớm
+double stoplossPip = stepPrice;     // Số pips Stoploss
 
-input ENUM_TIMEFRAMES mainTimeframe = PERIOD_M5;
-input int rsiPeriod = 14;           // Chu kỳ RSI
-
-input string _____ = "                                                                ";
-input int maxOrders = 12;           // Số lệnh tối đa
-input int nonTPQuantity = 5;              // Số lệnh chốt non
-input int averageQuantity = 7;            // Số lệnh chốt hòa
-
-
-input string _______ = "                                                                ";
 const string TG_API_URL = "https://api.telegram.org";
-input string botTkn = "8143370585:AAHAYagRIB614EkjsA_8ggflIP-vlLJsnwY"; // bot telegram token
-input string chatID = "-1002349691879"; // chatID
-
-double tpPip;                             // Số pips chốt lời
-double nonTpPip;                          // Số pips chốt lời sớm
-double stoplossPip = stepPip;     // Số pips Stoploss
-
 
 // Khai báo Magic Number
 int MAGIC_NUMBER = 123456;
@@ -128,11 +125,15 @@ int OnInit()
          rsiThresholdSell = 69;
          rsiThresholdBuy = 31;
          break;
+      case MODE_70:
+         rsiThresholdSell = 70;
+         rsiThresholdBuy = 30;
+         break;
       case MODE_75:
          rsiThresholdSell = 75;
          rsiThresholdBuy = 25;
          break;
-      case SAFE_MODE_80:
+      case MODE_80:
          rsiThresholdSell = 80;
          rsiThresholdBuy = 20;
          break;
@@ -150,11 +151,11 @@ int OnInit()
          break;
      }
 
-   TPRSISell = rsiThresholdSell - TPRSIDistanceSellInput;
-   TPRSIBuy = rsiThresholdBuy + TPRSIDistanceBuyInput;
-   tpPip = stepPip;                 // Số pips chốt lời
-   nonTpPip = stepPip / 2;              // Số pips chốt lời sớm
-   stoplossPip = stepPip;
+   TPRSISell = rsiThresholdSell - TPRSIDistanceInput;
+   TPRSIBuy = rsiThresholdBuy + TPRSIDistanceInput;
+   tpPrice = stepPrice;                 // Số pips chốt lời
+   nontpPrice = stepPrice / 2;              // Số pips chốt lời sớm
+   stoplossPip = stepPrice;
    CalculateX();
    MathSrand(GetTickCount()); // Khởi tạo seed từ thời gian hệ thống
    MAGIC_NUMBER = MathRand(); // Tạo số ngẫu nhiên
@@ -384,9 +385,8 @@ void OnTick()
 
    double bidPrice = SymbolInfoDouble(Symbol(), SYMBOL_BID);
    double askPrice = SymbolInfoDouble(Symbol(), SYMBOL_ASK);
-   double pointValue = _Point * (SymbolInfoInteger(Symbol(), SYMBOL_DIGITS) == 3 || SymbolInfoInteger(Symbol(), SYMBOL_DIGITS) == 5 ? 10 : 1);
 
-   double spread = (askPrice - bidPrice) * pointValue; // Tính Spread theo đơn vị pip
+   double spread = (askPrice - bidPrice); // Tính Spread theo đơn vị pip
 
    double profit = AccountInfoDouble(ACCOUNT_PROFIT);
    if(profit < maxLost)
@@ -423,15 +423,15 @@ void OnTick()
    CheckAndClosePosBuyOnMarketDrop();
    CheckAndClosePosSellOnMarketDrop();
 
-   bool shouldBuyRSI = (currentRSI <= rsiThresholdBuy && realTimeRSI <= currentRSI + 5);
-   bool shouldSellRSI = (currentRSI >= rsiThresholdSell && realTimeRSI >= currentRSI - 5);
+   bool shouldBuyRSI = (currentRSI <= rsiThresholdBuy && realTimeRSI <= currentRSI + TPRSIDistanceInput);
+   bool shouldSellRSI = (currentRSI >= rsiThresholdSell && realTimeRSI >= currentRSI - TPRSIDistanceInput);
 
 // Logic mua lần đầu
    if(PositionsTotal() < 1 &&
       shouldBuyRSI &&
       currentBuyOrder < 1 &&
       currentSellOrder < 1 &&
-      spread < stepPip / 2 &&
+      spread < stepPrice / 2 &&
       !isRisk)
      {
       if(trade.Buy(lotSizes[currentBuyOrder] * xBuy, Symbol(), askPrice, 0, 0, "Buy " + (currentBuyOrder + 1)))
@@ -444,8 +444,8 @@ void OnTick()
 // Logic mua các lần tiếp theo
    if(currentBuyOrder > 0 && currentBuyOrder < maxOrders)
      {
-      double buyPrice = lastBuyPrice - stepPip * pointValue;
-      double buyPrice2 = lastBuyPrice - stepPip * 3 * pointValue;
+      double buyPrice = lastBuyPrice - stepPrice;
+      double buyPrice2 = lastBuyPrice - stepPrice * 6;
       bool shouldOpen = (CanPlaceBuyOrder(currentBuyOrder) && askPrice <= buyPrice) || (askPrice <= buyPrice2);
 
       if(shouldOpen)
@@ -462,7 +462,7 @@ void OnTick()
       shouldSellRSI &&
       currentSellOrder < 1 &&
       currentBuyOrder < 1 &&
-      spread < stepPip / 2 &&
+      spread < stepPrice / 2 &&
       !isRisk)
      {
       if(trade.Sell(lotSizes[currentSellOrder] * xSell, Symbol(), bidPrice, 0, 0, "Sell " + (currentSellOrder + 1)))
@@ -475,8 +475,8 @@ void OnTick()
 // Logic bán các lần tiếp theo
    if(currentSellOrder > 0 && currentSellOrder < maxOrders)
      {
-      double sellPrice = lastSellPrice + stepPip * pointValue; // Tính giá lệnh mới theo stepPip
-      double sellPrice2 = lastSellPrice + stepPip * 3 * pointValue; // Tính giá lệnh mới theo stepPip
+      double sellPrice = lastSellPrice + stepPrice; // Tính giá lệnh mới theo stepPrice
+      double sellPrice2 = lastSellPrice + stepPrice * 6; // Tính giá lệnh mới theo stepPrice
 
       double shouldOpen = (CanPlaceBuyOrder(currentSellOrder) && bidPrice >= sellPrice) || bidPrice >= sellPrice2;
       if(shouldOpen)
@@ -491,24 +491,24 @@ void OnTick()
    if(currentBuyOrder > 0)
      {
       double avgPriceBuy = GetAverageOpenPrice(POSITION_TYPE_BUY);
-      double tpPipBuy = tpPip;
+      double tpPriceBuy = tpPrice;
       int totalCandle = CountCandlesFromFirstOrder();
       if(currentBuyOrder >= averageQuantity || totalCandle >= candleTP0 || isRisk)
         {
-         tpPipBuy = 0;
+         tpPriceBuy = 0;
         }
       else
         {
          if(currentBuyOrder < nonTPQuantity && totalCandle < candleNonTP) // chốt bt lại 5 lệnh
            {
-            tpPipBuy = tpPip;
+            tpPriceBuy = tpPrice;
            }
          else
            {
-            tpPipBuy = nonTpPip;
+            tpPriceBuy = nontpPrice;
            }
         }
-      double combinedTPBuy = avgPriceBuy + tpPipBuy * pointValue;
+      double combinedTPBuy = avgPriceBuy + tpPriceBuy;
       SetTPForAllPositions(combinedTPBuy);
      }
 
@@ -516,26 +516,26 @@ void OnTick()
    if(currentSellOrder > 0)
      {
       double avgPriceSell = GetAverageOpenPrice(POSITION_TYPE_SELL);
-      double tpPipSell = tpPip;
+      double tpPriceSell = tpPrice;
 
       int totalCandle = CountCandlesFromFirstOrder();
 
       if(currentSellOrder >= averageQuantity || totalCandle >= candleTP0 || isRisk)
         {
-         tpPipSell = 0;
+         tpPriceSell = 0;
         }
       else
         {
          if(currentSellOrder < nonTPQuantity && totalCandle < candleNonTP) // chốt bt lại 5 lệnh
            {
-            tpPipSell = tpPip;
+            tpPriceSell = tpPrice;
            }
          else
            {
-            tpPipSell = nonTpPip;
+            tpPriceSell = nontpPrice;
            }
         }
-      double combinedTPBuy = avgPriceSell - tpPipSell * pointValue;
+      double combinedTPBuy = avgPriceSell - tpPriceSell;
       SetTPForAllPositions(combinedTPBuy);
      }
   }
@@ -699,8 +699,7 @@ void CheckAndClosePosBuyOnMarketDrop()
   {
    if(currentBuyOrder >= maxOrders) // Kiểm tra đã vào đủ số lệnh tối đa chưa
      {
-      double pointValue = _Point * (SymbolInfoInteger(Symbol(), SYMBOL_DIGITS) == 3 || SymbolInfoInteger(Symbol(), SYMBOL_DIGITS) == 5 ? 10 : 1);
-      SetSLForAllPositions(lastBuyPrice - stoplossPip * pointValue);
+      SetSLForAllPositions(lastBuyPrice - stoplossPip);
      }
   }
 //+------------------------------------------------------------------+
@@ -710,8 +709,7 @@ void CheckAndClosePosSellOnMarketDrop()
   {
    if(currentSellOrder >= maxOrders) // Kiểm tra đã vào đủ số lệnh tối đa chưa
      {
-      double pointValue = _Point * (SymbolInfoInteger(Symbol(), SYMBOL_DIGITS) == 3 || SymbolInfoInteger(Symbol(), SYMBOL_DIGITS) == 5 ? 10 : 1);
-      SetSLForAllPositions(lastSellPrice + stoplossPip * pointValue);
+      SetSLForAllPositions(lastSellPrice + stoplossPip);
      }
   }
 
