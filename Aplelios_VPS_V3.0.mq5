@@ -219,7 +219,7 @@ void OnTick()
          CalculateX();
          break;
       default:
-         autoX = botModeInput;
+         autoX = autoXInput;
          CalculateX();
          break;
      }
