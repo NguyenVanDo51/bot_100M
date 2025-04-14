@@ -34,7 +34,7 @@ enum AUTO_X_MODE
 //|                                                                  |
 //+------------------------------------------------------------------+
 input BOT_MODE botModeInput = MODE_69;               // MODE (Cài sẵn RSI, x2 lot với safe mode)
-input AUTO_X_MODE autoXInput = MODE_10K_X3_SL_42;     // Hệ số tự đông
+input AUTO_X_MODE autoXInput = MODE_2K_X1_SL_70;     // Hệ số tự đông
 input bool compoundInterest = true;             // Chế độ lãi kép
 
 input string _ = "                                                                   ";
@@ -77,8 +77,8 @@ input string chatID = "-1002349691879"; // chatID
 double TPRSISell = 60;
 double TPRSIBuy = 40;
 
-BOT_MODE botMode = MODE_69;
-AUTO_X_MODE autoX = MODE_10K_X3_SL_42;
+BOT_MODE botMode = botModeInput;
+AUTO_X_MODE autoX = autoXInput;
 
 //+------------------------------------------------------------------+
 //|                                                                  |
@@ -189,11 +189,10 @@ void OnTick()
    int rsiCode = (int)(remoteRSI * 100); // ví dụ: 0.01 → 1
    int xCode = (int)(remoteX * 100); // ví dụ: 0.05 → 5
 
-
    switch(rsiCode)
      {
       case 0:
-         CalculateRSI(MODE_69);
+         CalculateRSI(botModeInput);
          break;
       case 1:
          NotifyMessage("Đã tạm dừng BOT");
@@ -219,12 +218,15 @@ void OnTick()
          CalculateX();
          break;
       default:
-         autoX = autoXInput;
-         CalculateX();
+         if(autoX != autoXInput)
+           {
+            autoX = autoXInput;
+            CalculateX();
+           }
          break;
      }
-
-   string msg = "BOT đang hoạt động | Chế độ " + BotModeToString(botMode) + " | Hệ số lot: " + AutoXModeToString(autoX);
+   string xModeStr = AutoXModeToString(autoX);
+   string msg = "BOT đang hoạt động | Chế độ " + BotModeToString(botMode) + " | Hệ số lot: " + xModeStr;
    NotifyMessage(msg);
 
    CountBuySellOrders();
@@ -255,7 +257,7 @@ void OnTick()
      }
    GetLastOrderPrice();
 
-   double currentRSI = rsiValues[0];      // RSI khi nến đóng
+   double lastRSI = rsiValues[0];      // RSI khi nến đóng
    double realTimeRSI = realTimeRsiValues[0];  // RSI real-time (đang chạy)
 
    double bidPrice = SymbolInfoDouble(Symbol(), SYMBOL_BID);
@@ -269,6 +271,7 @@ void OnTick()
       maxLost = profit;
      }
    Comment(
+      "X MODE: ", xModeStr, "\n",
       "Hệ số SELL: ", xSell, "\n",
       "Hệ số BUY: ", xBuy, "\n",
 
@@ -298,10 +301,10 @@ void OnTick()
    CheckAndClosePosBuyOnMarketDrop();
    CheckAndClosePosSellOnMarketDrop();
 
-   // bool shouldBuyRSI = (currentRSI <= rsiThresholdBuy && realTimeRSI <= currentRSI + TPRSIDistanceInput);
-   // bool shouldSellRSI = (currentRSI >= rsiThresholdSell && realTimeRSI >= currentRSI - TPRSIDistanceInput);
-   bool shouldBuyRSI = (currentRSI <= rsiThresholdBuy && realTimeRSI <= TPRSIBuy);
-   bool shouldSellRSI = (currentRSI >= rsiThresholdSell && realTimeRSI >= TPRSISell);
+// bool shouldBuyRSI = (lastRSI <= rsiThresholdBuy && realTimeRSI <= lastRSI + TPRSIDistanceInput);
+// bool shouldSellRSI = (lastRSI >= rsiThresholdSell && realTimeRSI >= lastRSI - TPRSIDistanceInput);
+   bool shouldBuyRSI = (lastRSI <= rsiThresholdBuy && realTimeRSI <= TPRSIBuy);
+   bool shouldSellRSI = (lastRSI >= rsiThresholdSell && realTimeRSI >= TPRSISell);
 // Logic mua lần đầu
    if(PositionsTotal() < 1 &&
       shouldBuyRSI &&
@@ -321,7 +324,7 @@ void OnTick()
    if(currentBuyOrder > 0 && currentBuyOrder < maxOrders)
      {
       double buyPrice = lastBuyPrice - stepPrice;
-      double buyPrice2 = lastBuyPrice - stepPrice * 6;
+      double buyPrice2 = lastBuyPrice - stepPrice * 3;
       bool shouldOpen = (CanPlaceBuyOrder(currentBuyOrder) && askPrice <= buyPrice) || (askPrice <= buyPrice2);
 
       if(shouldOpen)
@@ -352,7 +355,7 @@ void OnTick()
    if(currentSellOrder > 0 && currentSellOrder < maxOrders)
      {
       double sellPrice = lastSellPrice + stepPrice; // Tính giá lệnh mới theo stepPrice
-      double sellPrice2 = lastSellPrice + stepPrice * 6; // Tính giá lệnh mới theo stepPrice
+      double sellPrice2 = lastSellPrice + stepPrice * 3; // Tính giá lệnh mới theo stepPrice
 
       double shouldOpen = (CanPlaceBuyOrder(currentSellOrder) && bidPrice >= sellPrice) || bidPrice >= sellPrice2;
       if(shouldOpen)
@@ -788,32 +791,51 @@ void SetTPForAllPositions(double tpPrice)
 //+------------------------------------------------------------------+
 void SetSLForAllPositions(double slPrice)
   {
+   int totalToSet = 0;       // Số lệnh cần set SL
+   int totalSetSuccess = 0;  // Số lệnh đã set SL thành công
+
    for(int i = PositionsTotal() - 1; i >= 0; i--)
      {
-      // Lấy ticket của lệnh
       ulong ticket = PositionGetTicket(i);
 
-      // Chọn lệnh bằng ticket
       if(PositionSelectByTicket(ticket) && PositionGetString(POSITION_SYMBOL) == Symbol())
         {
-         double tpPrice = PositionGetDouble(POSITION_TP);      // Lấy mức TP hiện tại
-         double currentSLPrice = PositionGetDouble(POSITION_SL); // Lấy mức SL hiện tại
+         double tpPrice = PositionGetDouble(POSITION_TP);
+         double currentSLPrice = PositionGetDouble(POSITION_SL);
 
          // Nếu SL đã đúng thì bỏ qua
          if(slPrice == currentSLPrice)
             continue;
 
-         // Chỉnh sửa SL cho lệnh bot
+         totalToSet++;
+
          if(!trade.PositionModify(ticket, slPrice, tpPrice))
            {
-            // Print("❌ Failed to set SL for position with ticket: ", ticket, ", Error: ", GetLastError());
+            Print("❌ Failed to set SL for position with ticket: ", ticket, ", Error: ", GetLastError());
            }
          else
            {
-            Print("✅ Đã Setting SL cho lệnh bot: ", ticket, " tại giá: ", slPrice);
+            Print(" Đã Setting SL cho lệnh bot: ", ticket, " tại giá: ", slPrice);
+            totalSetSuccess++;
            }
         }
      }
+
+// Nếu tất cả lệnh cần set SL đều thành công
+   if(totalToSet > 0 && totalSetSuccess == totalToSet)
+     {
+      Print("Đã set SL cho TẤT CẢ ", totalSetSuccess, " lệnh - Dừng EA");
+      // ExpertRemove();
+     }
+   else
+      if(totalToSet > 0)
+        {
+         Print("️ Chỉ set SL thành công ", totalSetSuccess, "/", totalToSet, " lệnh. EA vẫn tiếp tục chạy.");
+        }
+      else
+        {
+         Print("️ Không có lệnh nào cần set SL.");
+        }
   }
 
 //+------------------------------------------------------------------+
@@ -913,6 +935,6 @@ double GetEffectiveLeverage()
      }
 
    double contract_value = lot * 100.0 * price; // XAUUSD: 100 oz mỗi lot
-   return contract_value / margin;
+   return MathRound(contract_value / margin);
   }
 //+------------------------------------------------------------------+
