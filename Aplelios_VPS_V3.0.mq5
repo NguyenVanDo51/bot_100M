@@ -34,7 +34,7 @@ enum AUTO_X_MODE
 //|                                                                  |
 //+------------------------------------------------------------------+
 input BOT_MODE botModeInput = MODE_69;               // MODE (Cài sẵn RSI, x2 lot với safe mode)
-input AUTO_X_MODE autoXInput = MODE_2K_X1_SL_70;     // Hệ số tự đông
+input AUTO_X_MODE autoXInput = MODE_10K_X3_SL_42;     // Hệ số tự đông
 input bool compoundInterest = true;             // Chế độ lãi kép
 
 input string _ = "                                                                   ";
